@@ -1,0 +1,7 @@
+name: EnhancedAdaCent
+k: 20
+n_candidates: 500
+exploration: 0.1
+tail_x: 0.1
+epsilon: 0.05
+find_best: True

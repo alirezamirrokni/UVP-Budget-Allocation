@@ -1,0 +1,6 @@
+name: AdaCent
+k: 20
+n_candidates: 500
+exploration: 0.1
+tail_x: 0.1
+find_best: True
