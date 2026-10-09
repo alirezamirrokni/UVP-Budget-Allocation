@@ -6,9 +6,6 @@ from typing import List, Tuple
 from torch.quasirandom import SobolEngine
 
 
-# --------------------------------------------------------------------- #
-#                 enhanced centre selection helper                      #
-# --------------------------------------------------------------------- #
 def k_center_with_history_values(
     vecs: np.ndarray,
     k: int,
@@ -75,24 +72,6 @@ def k_center_with_history_values(
 
 
 class EnhancedFullCent:
-    """
-    Batched, non-adaptive K-Center full-evaluation HPO with enhanced distances.
-
-    Parameters
-    ----------
-    n : int
-        Number of Sobol candidate vectors to draw.
-    k : int
-        Centres selected per batch.
-    T : int
-        Maximum training epochs for any configuration.
-    B : int
-        Global training-step budget across all batches.
-    epsilon : float
-        Smoothness parameter used in the enhanced-distance formula.
-    seed : int, optional
-        RNG seed.
-    """
     def __init__(
         self,
         n: int,
@@ -111,9 +90,7 @@ class EnhancedFullCent:
         self.rng = np.random.default_rng(seed)
         self.last_num_used_configs = 0
 
-    # ----------------------------------------------------------------- #
-    #                             main loop                             #
-    # ----------------------------------------------------------------- #
+
     def run(self, bench, task_id: str) -> List[Tuple[int, float]]:
         dim = get_suite_dim(bench)
         vecs = SobolEngine(
@@ -131,7 +108,7 @@ class EnhancedFullCent:
         used_configs = 0
 
         while total_spent < self.B:
-            # ------------------- 4-A. choose new centres -------------------
+
             idxs = k_center_with_history_values(
                 vecs,
                 self.k,
@@ -152,7 +129,7 @@ class EnhancedFullCent:
                 for vec in new_centers
             ]
 
-            # ------------------- 4-B. fully evaluate centres -------------------
+
             while any(c["spent"] < self.T for c in cands) and total_spent < self.B:
                 for c in cands:
                     if c["spent"] >= self.T or total_spent >= self.B:
@@ -170,7 +147,7 @@ class EnhancedFullCent:
                     best_overall = max(best_overall, acc)
                     trace.append((total_spent, best_overall))
 
-            # ------------------- 4-C. update centre history -------------------
+
             vals = np.array(
                 [
                     c["value"] if c["value"] is not None else 0.0

@@ -12,7 +12,7 @@ low_cost: 0
 fidelities: [0.1, 0.5, 1.0]
 target_fidelity: 1.0
 budget: 50
-stopping_criteria: 'budget' # budget or max_iter
+stopping_criteria: 'budget'
 max_n_iter: 100
 n_repeat: 10
-plot_results: True  
+plot_results: True

@@ -124,7 +124,7 @@ def find_result_file(
     if not candidates:
         return None
 
-    # Prefer the file with more repetitions. For ties, use the newest file.
+
     return max(candidates, key=lambda item: (item[0], item[1]))[2]
 
 
@@ -138,7 +138,6 @@ def load_numeric_record(path: Path) -> np.ndarray:
 
 
 def final_values(record: np.ndarray) -> np.ndarray:
-    """Return the last valid recorded accuracy from every non-empty run."""
     values: list[float] = []
 
     for run in record:
@@ -165,7 +164,6 @@ def summarize_final(record: np.ndarray) -> tuple[float, float, int]:
 
 
 def automatic_ylim(means: np.ndarray, errors: np.ndarray) -> tuple[float, float]:
-    """Choose a compact accuracy range similar to the reference plot."""
     lower = float(np.min(means - errors))
     upper = float(np.max(means + errors))
     spread = max(upper - lower, max(abs(upper), 1.0) * 0.015)
@@ -174,7 +172,7 @@ def automatic_ylim(means: np.ndarray, errors: np.ndarray) -> tuple[float, float]
     ymin = lower - padding
     ymax = upper + padding
 
-    # Round outward to clean tick-friendly values.
+
     step = 1.0 if max(abs(ymin), abs(ymax)) > 10 else 0.1
     ymin = math.floor(ymin / step) * step
     ymax = math.ceil(ymax / step) * step
@@ -262,7 +260,7 @@ def main() -> None:
     ax.set_axisbelow(True)
     ax.margins(x=0.05)
 
-    # Match the restrained gray frame/grid appearance of the reference figure.
+
     for spine in ax.spines.values():
         spine.set_color("#C8C8C8")
         spine.set_linewidth(1.4)

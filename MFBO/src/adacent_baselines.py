@@ -32,7 +32,13 @@ def _linear_tail(
 def _draw_candidate_pool(problem, n_candidates: int, tkwargs: dict) -> torch.Tensor:
     sobol = SobolEngine(dimension=problem.dim - 1, scramble=True)
     base = sobol.draw(n_candidates).to(**tkwargs)
-    return unnormalize(base, bounds=problem.bounds[:, :-1])
+
+
+    bounds = problem.bounds[:, :-1].to(**tkwargs)
+    candidates = unnormalize(base, bounds=bounds)
+    lower = bounds[0].unsqueeze(0)
+    upper = bounds[1].unsqueeze(0)
+    return torch.maximum(lower, torch.minimum(candidates, upper))
 
 
 def _eval_at_fidelity(problem, vec: torch.Tensor, fidelity: float, tkwargs: dict) -> float:
@@ -214,13 +220,6 @@ def _run_adacent_core(
     checkpoint_callback=None,
     show_progress: bool = True,
 ):
-    """Run AdaCent as a resumable evaluation-level state machine.
-
-    A checkpoint callback is invoked after every objective evaluation.  The
-    serialized state includes the candidate pool, active center batch, pruning
-    position, local NumPy generator state, and all history needed to continue
-    without restarting the repetition.
-    """
     from tqdm import tqdm
 
     n_candidates = int(config.algorithm.n_candidates)
@@ -236,6 +235,8 @@ def _run_adacent_core(
     target_fidelity = float(config.problem.target_fidelity)
     n_fids = len(fidelity_values)
     explore_until = max(1, int(np.ceil(exploration * n_fids)))
+    full_completion_cost = sum(low_cost + fid for fid in fidelity_values)
+    protected_target = int(budget_limit // max(full_completion_cost, 1e-12))
 
     cumulative_cost = [] if cumulative_cost is None else list(cumulative_cost)
     if train_x is None:
@@ -304,13 +305,19 @@ def _run_adacent_core(
     try:
         while True:
             if phase == "select":
-                if sum(cumulative_cost) > budget_limit:
+                if sum(cumulative_cost) >= budget_limit:
                     break
+
+                protected_resolved = min(len(prev_centers), protected_target)
+                if protected_resolved < protected_target:
+                    batch_k = min(k, protected_target - protected_resolved)
+                else:
+                    batch_k = k
 
                 if enhanced:
                     idxs = k_center_with_history_values(
                         pool_np,
-                        k,
+                        batch_k,
                         rng,
                         epsilon=epsilon,
                         prev_centers=prev_centers,
@@ -319,7 +326,7 @@ def _run_adacent_core(
                 else:
                     idxs = k_center_with_history(
                         pool_np,
-                        k,
+                        batch_k,
                         rng,
                         prev_centers=prev_centers,
                     )
@@ -354,12 +361,11 @@ def _run_adacent_core(
                     if c["spent_idx"] >= n_fids:
                         c["active"] = False
                         continue
-                    if sum(cumulative_cost) > budget_limit:
-                        phase = "finalize"
-                        break
-
                     fid = fidelity_values[c["spent_idx"]]
                     eval_cost = low_cost + fid
+                    if sum(cumulative_cost) + eval_cost > budget_limit:
+                        phase = "finalize"
+                        break
                     vec_t = pool_t[c["idx"]]
                     y = _eval_at_fidelity(problem, vec_t, fid, tkwargs)
 
@@ -385,7 +391,7 @@ def _run_adacent_core(
 
                     save_after_evaluation()
 
-                    if sum(cumulative_cost) > budget_limit:
+                    if sum(cumulative_cost) >= budget_limit:
                         phase = "finalize"
                         break
 
@@ -435,7 +441,7 @@ def _run_adacent_core(
                 cursor = 0
                 phase = "select"
 
-                if sum(cumulative_cost) > budget_limit:
+                if sum(cumulative_cost) >= budget_limit:
                     break
     finally:
         progress.close()

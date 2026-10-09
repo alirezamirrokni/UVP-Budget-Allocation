@@ -20,7 +20,7 @@ def _plain_config(config: DictConfig) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise TypeError("Expected the resolved Hydra configuration to be a mapping.")
 
-    # Runtime-only checkpoint controls should not change experiment identity.
+
     payload = copy.deepcopy(payload)
     payload.pop("checkpoint", None)
     if isinstance(payload.get("problem"), dict):
@@ -77,11 +77,6 @@ def restore_rng_state(state: dict[str, Any] | None) -> None:
 
 
 def atomic_save_checkpoint(path: Path, payload: dict[str, Any]) -> None:
-    """Atomically replace one .npy checkpoint file.
-
-    Writing through a temporary file prevents a killed process from corrupting
-    the last valid checkpoint.
-    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     try:

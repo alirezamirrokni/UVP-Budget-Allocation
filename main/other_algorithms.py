@@ -16,11 +16,7 @@ logging.getLogger("Pyro4").setLevel(logging.ERROR)
 logging.getLogger("smac").setLevel(logging.ERROR)
 
 
-# ──────────────────────────────────────────────────────────────
-# Helper: detect fidelity, target & “integer scale” once
-# ──────────────────────────────────────────────────────────────
 def _fidelity_info(bench) -> tuple[str, bool]:
-    """Return (fidelity_param_id, on_integer_scale)."""
     fid_space = bench.get_fidelity_space()
     if "rbv2_" in bench.config.config_id:
         fid_param = "trainsize"
@@ -71,9 +67,6 @@ def _build_trace_from_archive(bench, fidelity_param_id: str,
     return trace
 
 
-# ──────────────────────────────────────────────────────────────
-# Random Search
-# ──────────────────────────────────────────────────────────────
 def random_search(bench,
                   task_id: str,
                   *,
@@ -106,9 +99,6 @@ def random_search(bench,
     )
 
 
-# ──────────────────────────────────────────────────────────────
-# BOHB & Hyperband
-# ──────────────────────────────────────────────────────────────
 def _hb_or_bohb(bench,
                 task_id: str,
                 *,
@@ -228,9 +218,6 @@ def hyperband(bench,
     )
 
 
-# ──────────────────────────────────────────────────────────────
-# SMAC-HPO (single-fidelity, full budget)
-# ──────────────────────────────────────────────────────────────
 def smac_search(bench,
                 task_id: str,
                 *,

@@ -16,16 +16,13 @@ from .utils import estimate_epsilon, get_all_task_ids, track_objective_function
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 
-# ---------------------------------------------------------------------------
-# User settings
-# ---------------------------------------------------------------------------
 SUITE_NAME = "lcbench"
 TASK_IDS: List[str] = []
 SEEDS = list(range(30))
 MAX_EPOCH = 52
-HORIZON = 1000
+HORIZON = 20 * MAX_EPOCH
 HB_BUDGET = 589
-OUTDIR = None 
+OUTDIR = None
 
 SELECTED_ALGOS: Dict[str, Dict] = {
     "Random Search": {"trials": 20},
@@ -36,9 +33,6 @@ SELECTED_ALGOS: Dict[str, Dict] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Helper utilities
-# ---------------------------------------------------------------------------
 def get_distinct_colors(n):
     return sns.color_palette("bright", n)
 

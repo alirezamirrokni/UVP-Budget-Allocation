@@ -1,33 +1,13 @@
-from .utils import get_acc, get_suite_dim
-from .AdaCent import _linear_tail
+from typing import List, Tuple
 
 import numpy as np
-
-from typing import List, Tuple
 from torch.quasirandom import SobolEngine
+
+from .AdaCent import _linear_tail
+from .utils import get_acc, get_suite_dim
 
 
 class EnhancedAdaCent:
-    """
-    Batched, exploration-aware K-Center early-stopping HPO.
-
-    Parameters
-    ----------
-    n : int
-        Number of Sobol candidate vectors to draw.
-    k : int
-        Centres per batch.
-    T : int
-        Maximum training epochs for any configuration.
-    B : int
-        Global training-step budget (across *all* batches).
-    exploration : float, optional (default = 0.3)
-        Fraction of `T` used for the *exploration* phase of a centre.
-    epsilon : float, optional (default = 0.1)
-        Tunable constant from the enhanced-distance formula.
-    seed : int, optional
-        RNG seed.
-    """
     def __init__(
         self,
         n: int,
@@ -48,9 +28,6 @@ class EnhancedAdaCent:
         self.rng = np.random.default_rng(seed)
         self.last_num_used_configs = 0
 
-    # --------------------------------------------------------------------- #
-    #                                helpers                                #
-    # --------------------------------------------------------------------- #
     def _choose_next_center(
         self,
         remaining_idx: np.ndarray,
@@ -59,40 +36,47 @@ class EnhancedAdaCent:
         best_perf: float,
         dist_mat: np.ndarray,
     ) -> int:
-        """Choose the next centre with the enhanced value-weighted metric."""
         if selected_idx.size == 0:
             return int(self.rng.choice(remaining_idx))
 
-        base = dist_mat[np.ix_(remaining_idx, selected_idx)] 
+        base = dist_mat[np.ix_(remaining_idx, selected_idx)]
         scales = best_perf / perf[selected_idx]
-
-
         adjusted = base * scales - (1.0 / self.epsilon) * (scales - 1.0)
         scores = adjusted.min(axis=1)
         return int(remaining_idx[np.argmax(scores)])
 
-    # --------------------------------------------------------------------- #
-    #                               main loop                               #
-    # --------------------------------------------------------------------- #
     def run(self, bench, task_id: str) -> List[Tuple[int, float]]:
         dim = get_suite_dim(bench)
-        vecs = SobolEngine(dim, scramble=True, seed=self.seed).draw(self.n).numpy()
+        vecs = SobolEngine(
+            dim,
+            scramble=True,
+            seed=self.seed,
+        ).draw(self.n).numpy()
         diff = vecs[:, None, :] - vecs[None, :, :]
         dist_mat = np.linalg.norm(diff, axis=-1)
 
         remaining = np.ones(self.n, dtype=bool)
         perf = np.zeros(self.n, dtype=np.float32)
-        total_spent, best_global = 0, -np.inf
+        total_spent = 0
+        best_global = -np.inf
         trace: List[Tuple[int, float]] = []
         best_perf = 0.0
         used_configs = 0
+        protected_target = min(self.n, self.B // self.T)
+        protected_selected = 0
 
         while total_spent < self.B and remaining.any():
-            selected_batch = []
+            if protected_selected < protected_target:
+                batch_k = min(self.k, protected_target - protected_selected)
+                protected_batch = True
+            else:
+                batch_k = self.k
+                protected_batch = False
 
-            # ------------------- 3-A. pick & explore k centres -------------------
-            for _ in range(self.k):
-                # stop early if nothing left to pick
+            selected_batch = []
+            cands = []
+
+            for _ in range(batch_k):
                 remaining_idx = np.nonzero(remaining)[0]
                 if len(remaining_idx) == 0 or total_spent >= self.B:
                     break
@@ -107,9 +91,10 @@ class EnhancedAdaCent:
                 selected_batch.append(idx)
                 remaining[idx] = False
 
-                # ----- exploration phase -----
                 hist = []
                 for t in range(1, self.explore_until + 1):
+                    if total_spent >= self.B:
+                        break
                     if not hist:
                         used_configs += 1
                     acc = get_acc(vecs[idx], task_id, t, bench, self.T)
@@ -117,28 +102,31 @@ class EnhancedAdaCent:
                     total_spent += 1
                     best_global = max(best_global, acc)
                     trace.append((total_spent, best_global))
-                    if total_spent >= self.B:
-                        break
-                if total_spent >= self.B:
+
+                if not hist:
                     break
 
                 perf[idx] = hist[-1][1]
                 best_perf = max(best_perf, perf[idx])
+                cands.append(
+                    {
+                        "idx": idx,
+                        "vec": vecs[idx],
+                        "spent": len(hist),
+                        "hist": hist,
+                        "active": len(hist) < self.T,
+                        "protected": protected_batch,
+                    }
+                )
 
-            if total_spent >= self.B or not selected_batch:
+                if total_spent >= self.B:
+                    break
+
+            if protected_batch:
+                protected_selected += len(cands)
+
+            if not cands:
                 break
-
-            # --------------- 3-B. jointly train them with early stop -------------
-            cands = []
-            for idx in selected_batch:
-                cands.append({
-                    "idx": idx,
-                    "vec": vecs[idx],
-                    "spent": self.explore_until,
-                    "hist": [(e, get_acc(vecs[idx], task_id, e, bench, self.T))
-                             for e in range(1, self.explore_until + 1)],
-                    "active": True,
-                })
 
             while any(c["active"] for c in cands) and total_spent < self.B:
                 for c in cands:
@@ -151,15 +139,23 @@ class EnhancedAdaCent:
                     best_global = max(best_global, acc)
                     trace.append((total_spent, best_global))
 
-                active_last_acc = [c["hist"][-1][1] for c in cands if c["active"]]
-                if active_last_acc:
-                    threshold = max(active_last_acc)
-                    for c in cands:
-                        if not c["active"]:
-                            continue
-                        pred = _linear_tail(c["hist"], self.T)
-                        if pred < threshold or c["spent"] >= self.T:
-                            c["active"] = False
+                active_last_acc = [
+                    c["hist"][-1][1] for c in cands if c["active"]
+                ]
+                if not active_last_acc:
+                    break
+
+                threshold = max(active_last_acc)
+                for c in cands:
+                    if not c["active"]:
+                        continue
+                    if c["spent"] >= self.T:
+                        c["active"] = False
+                        continue
+
+                    pred = _linear_tail(c["hist"], self.T)
+                    if pred < threshold:
+                        c["active"] = False
 
         self.last_num_used_configs = used_configs
         return trace

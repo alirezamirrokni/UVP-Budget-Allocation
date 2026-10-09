@@ -1,4 +1,4 @@
-# ───────────────────────── imports ──────────────────────────
+
 import contextlib
 import json
 
@@ -7,7 +7,6 @@ from torch.quasirandom import SobolEngine
 from yahpo_gym import BenchmarkSet
 
 
-# ─────────────────── suite helpers ───────────────────
 SUITE_DIMS = {
     "lcbench": 7,
     "rbv2_aknn": 6,
@@ -82,7 +81,6 @@ def get_all_task_ids(suite_name: str) -> list[str]:
     raise RuntimeError(f"Could not discover task IDs for suite '{suite_name}'.")
 
 
-# ───────────────────────── tracking helpers ─────────────────────────
 def _normalize_for_hash(value):
     if isinstance(value, np.generic):
         value = value.item()
@@ -140,8 +138,6 @@ def track_objective_function(bench):
         bench.objective_function = original
 
 
-# ─────────────────── YAHPO helpers ─────────────────
-# for lcbench
 def vector_to_config(x: np.ndarray, task_id: str, epoch: int) -> dict:
     x0 = np.clip(x[0], 0.0, 1.0)
     low = np.float64(0.00010000000000000009)
@@ -163,13 +159,10 @@ def vector_to_config(x: np.ndarray, task_id: str, epoch: int) -> dict:
 
 
 def get_val_accuracy(x: np.ndarray, task_id: str, epoch: int, bench) -> float:
-    """One surrogate call."""
     res = bench.objective_function(vector_to_config(x, task_id, epoch))
     return res[0]["val_accuracy"]
 
 
-# ─────────────────────────────────────────────────────────
-# for aknn
 def vector_to_config_(x: np.ndarray, task_id: str, trainsize: float, impute: str) -> dict:
     M = int(round(18 + x[0] * (50 - 18)))
     M = int(np.clip(M, 18, 50))
@@ -205,7 +198,6 @@ def vector_to_config_(x: np.ndarray, task_id: str, trainsize: float, impute: str
     }
 
 
-# for rpart
 def vector_to_config__(x: np.ndarray, task_id: str, trainsize: float, impute: str) -> dict:
     cp_low, cp_high = 0.0009118819655545162, 1.0
     cp = 10 ** (
@@ -242,9 +234,7 @@ def vector_to_config__(x: np.ndarray, task_id: str, trainsize: float, impute: st
     }
 
 
-# for all suites
 def get_acc(x: np.ndarray, task_id: str, fidelity_step: int, bench, max_steps: int = 52) -> float:
-    """One surrogate call."""
     suite_name = infer_suite_name(bench)
 
     if suite_name == "lcbench":

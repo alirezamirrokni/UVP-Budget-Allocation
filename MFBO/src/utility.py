@@ -29,7 +29,6 @@ warnings.filterwarnings("ignore")
 
 
 def optimize_acqf_and_get_acq(acq_func, batch_size=1, bounds=None, num_sample: int = 512):
-    """Optimizes the acquisition function, and returns a new candidate and a noisy observation."""
     candidates, acq_value = optimize_acqf(
         acq_function=acq_func,
         bounds=bounds,
@@ -42,7 +41,7 @@ def optimize_acqf_and_get_acq(acq_func, batch_size=1, bounds=None, num_sample: i
 
 
 def get_fitted_mlp(model, train_x, train_y, num_iter, optimizer):
-    # train the model with the given data
+
     train_iter = tqdm(range(num_iter), desc="Training MLP")
     model.train()
     for _ in train_iter:
@@ -55,9 +54,6 @@ def get_fitted_mlp(model, train_x, train_y, num_iter, optimizer):
 
 
 def get_fitted_model(X, Y, training=True, normalize=False, max_cholesky_size=4096, **kwargs):
-    '''
-    Use Botorch API to fit a GP model
-    '''
     dim = X.shape[-1]
     likelihood = GaussianLikelihood(noise_constraint=Interval(1e-8, 1e-3))
     covar_module = ScaleKernel(
@@ -97,13 +93,6 @@ def get_fitted_model(X, Y, training=True, normalize=False, max_cholesky_size=409
 
 
 def generate_initial_data(problem, fidelities, n=16, **kwargs):
-    """
-    Generate initial training data.
-
-    This version is device-safe:
-    - if `device` / `dtype` are not provided, they are inferred from `problem.bounds`
-    - random fidelities are sampled on the same device as `fidelities`
-    """
     dim = problem.dim
 
     if "device" not in kwargs:
@@ -150,7 +139,7 @@ def get_project(target_fidelities):
 
 
 def initialize_mf_model(train_x, train_obj, data_fidelity: int):
-    # define a surrogate model suited for a "training data"-like fidelity parameter
+
     model = SingleTaskMultiFidelityGP(
         train_x,
         train_obj,
@@ -162,13 +151,6 @@ def initialize_mf_model(train_x, train_obj, data_fidelity: int):
 
 
 def compute_maximum_posterior_variance(model, beta: Tensor, bounds=None) -> float:
-    '''
-    Compute the maximum mutual information for a given model
-    Args:
-    - model: the GP model to compute the information
-    - beta: the beta value
-    - bounds: the bounds of the optimization space
-    '''
     _acq_ci = qConfidenceInterval(model, beta)
     _, ci_width = optimize_acqf_and_get_acq(
         _acq_ci,
@@ -180,10 +162,6 @@ def compute_maximum_posterior_variance(model, beta: Tensor, bounds=None) -> floa
 
 
 def compute_information_bp_fast_classification(model, x_tr, y_tr, batch_size=200, no_bp=False):
-    """Compute the full information with back propagation support.
-    Using delta_w.T gw @ gw.T delta_w = (delta_w.T gw)^2 for efficient computation.
-    Cite: https://github.com/RyanWangZf/PAC-Bayes-IB/blob/main/src/models.py
-    """
     def one_hot_transform(y, num_class=100):
         one_hot_y = F.one_hot(y, num_classes=model.num_classes)
         return one_hot_y.float()
@@ -236,10 +214,6 @@ def compute_information_bp_fast_classification(model, x_tr, y_tr, batch_size=200
 
 
 def compute_information_bp_fast_regression(model, loss, x_tr, y_tr, batch_size=200, no_bp=False):
-    """Compute the full information with back propagation support.
-    Using delta_w.T gw @ gw.T delta_w = (delta_w.T gw)^2 for efficient computation.
-    Cite: https://github.com/RyanWangZf/PAC-Bayes-IB/blob/main/src/models.py
-    """
     all_tr_idx = np.arange(len(x_tr))
     np.random.shuffle(all_tr_idx)
 
@@ -285,11 +259,6 @@ def compute_information_bp_fast_regression(model, loss, x_tr, y_tr, batch_size=2
 
 
 def monte_carlo_entropy(samples: torch.Tensor) -> torch.Tensor:
-    """
-    Estimate entropy from repeated samples by counting unique rows/values.
-
-    Works on both CPU and CUDA and keeps everything on the same device.
-    """
     if samples.numel() == 0:
         return torch.zeros(1, device=samples.device, dtype=samples.dtype).squeeze()
 
@@ -308,16 +277,6 @@ def monte_carlo_entropy(samples: torch.Tensor) -> torch.Tensor:
 
 
 def monte_carlo_excessive_risk(fidelity_counts: torch.Tensor, beta) -> torch.Tensor:
-    """
-    Estimate the excessive risk of a single variable using Monte Carlo sampling.
-
-    Parameters:
-    - fidelity_counts: The number of samples at each fidelity.
-    - beta: The beta value to balance risk and regret bound
-
-    Returns:
-    - Estimated excessive risk.
-    """
     device = fidelity_counts.device
     dtype = torch.float64 if fidelity_counts.dtype not in (torch.float32, torch.float64) else fidelity_counts.dtype
 
@@ -350,18 +309,6 @@ def monte_carlo_excessive_risk(fidelity_counts: torch.Tensor, beta) -> torch.Ten
 
 
 def excessive_risk_reduction_rate(fidelity_counts: torch.Tensor, fidelity_choosen: int, beta) -> torch.Tensor:
-    """
-    Compute the risk reduction rate of the excessive risk.
-    Assuming the entropy doesn't change much
-
-    Parameters:
-    - fidelity_counts: The number of samples at each fidelity.
-    - beta: The beta value to balance risk and regret bound
-    - fidelity_choosen: The fidelity chosen to compute the risk reduction rate
-
-    Returns:
-    - Risk reduction rate.
-    """
     new_fidelity_counts = fidelity_counts.clone()
     new_fidelity_counts[fidelity_choosen] += 1
 
@@ -373,17 +320,6 @@ def excessive_risk_reduction_rate(fidelity_counts: torch.Tensor, fidelity_choose
 
 
 def rbf_kernel_variance_reduction_rate(T: int, dim: int, variance: torch.Tensor) -> torch.Tensor:
-    """
-    Compute the variance reduction rate of the RBF kernel.
-
-    Parameters:
-    - T: The number of iterations.
-    - dim: The dimension of the input space.
-    - variance: current maximum variance
-
-    Returns:
-    - Variance reduction rate.
-    """
     if T <= 1:
         return variance
 

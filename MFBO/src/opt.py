@@ -1,6 +1,3 @@
-'''
-This module contains the functions for Bayesian optimization
-'''
 import torch
 import gpytorch
 import numpy as np
@@ -72,9 +69,6 @@ def _safe_max_target(train_x: torch.Tensor,
 
 
 def get_mfkg(model, problem, cost_aware_utility, project):
-    '''
-    Get the multi-fidelity knowledge gradient acquisition function
-    '''
 
     curr_val_acqf = FixedFeatureAcquisitionFunction(
         acq_function=PosteriorMean(model),
@@ -110,7 +104,6 @@ def optimize_mfacq_and_get_observation(
     num_restarts,
     raw_samples,
 ):
-    """Optimizes MFKG and returns a new candidate, observation, and cost."""
 
     candidates, _ = optimize_acqf_mixed(
         acq_function=mfkg_acqf,
@@ -137,9 +130,6 @@ def bo_step_kg(model,
                batch_size,
                num_restarts,
                raw_samples):
-    '''
-    Perform one step of Bayesian optimization using the knowledge gradient acquisition function
-    '''
     mfkg_acqf = get_mfkg(model, problem, cost_aware_utility, project)
     new_x, new_obj, cost = optimize_mfacq_and_get_observation(
         mfkg_acqf,
@@ -160,9 +150,6 @@ def get_mfMES(model,
               project,
               sample_n: int = 40000,
               tkwargs: dict | None = None):
-    '''
-    Get the multi-fidelity entropy search acquisition function
-    '''
     tkwargs = {} if tkwargs is None else tkwargs
     cand_x_full, _ = generate_initial_data(
         problem=problem,
@@ -190,9 +177,6 @@ def bo_step_mes(model,
                 raw_samples,
                 tkwargs: dict | None = None,
                 **kwargs):
-    '''
-    Perform one step of Bayesian optimization using the max value entropy search acquisition function
-    '''
     tkwargs = {} if tkwargs is None else tkwargs
     mf_acqf = get_mfMES(
         model,
@@ -228,11 +212,8 @@ def rmfbo(
     checkpoint_callback=None,
     show_progress=True,
 ):
-    '''
-    Run the robust multi-fidelity Bayesian optimization loop
-    '''
-    # load configurations
-    max_cholesky_size = float("inf")  # Always use Cholesky
+
+    max_cholesky_size = float("inf")
     stopping_criteria = config.problem.stopping_criteria
     n_iter = config.problem.n_iter if stopping_criteria != 'budget' else config.problem.max_n_iter
     n_init, low_cost, \
@@ -307,7 +288,7 @@ def rmfbo(
         disable=not show_progress,
     )
     for r_idx in bo_iterator:
-        # Fit GP models for objective and constraints
+
         _, model = init_model_srdk(train_x, train_obj, training_iter=max_opt_iter, verbose=False)
 
         x_candidates, _ = generate_initial_data(
@@ -338,7 +319,7 @@ def rmfbo(
         mc_f_lcb = qLowerConfidenceBound(base_model, beta=bo_beta)
         mc_f_ci = qConfidenceInterval(base_model, beta=bo_beta)
 
-        # sample model for entropy
+
         lengthscale_list = []
         for _ in range(model_sample_num):
             _, tmp_model = init_model_srdk(
@@ -358,7 +339,7 @@ def rmfbo(
         )
         lengthscale_entropy = monte_carlo_entropy(int_lengthscale_list)
 
-        # define threshold
+
         with gpytorch.settings.max_cholesky_size(max_cholesky_size):
             _, _tmp_max_lcb = optimize_acqf_discrete(
                 acq_function=mc_f_lcb,
@@ -391,7 +372,7 @@ def rmfbo(
             sample_num=config.algorithm.sample_num,
         )
 
-        # optimize acquisition function
+
         with gpytorch.settings.max_cholesky_size(max_cholesky_size):
             if _has_any(target_mask):
                 center_idx = train_obj[target_mask].argmax().item()
@@ -430,7 +411,7 @@ def rmfbo(
             X_next = x_candidates[_choices][match_mask]
             _portion = _count_true(_choices) / space_sample_num
 
-        # optimize cost-aware acquisition function
+
         _t = train_x.size(0)
         _t_fids = torch.tensor(
             [_count_true(_fid_eq(train_x[:, -1], fid)) for fid in fidelities],
@@ -469,16 +450,16 @@ def rmfbo(
             _fid_col = fidelities[_fid_next].reshape(1, 1).repeat(batch_size, 1)
             X_next = torch.cat([_X_next, _fid_col], dim=-1)
 
-        # Evaluate both the objective and constraints for the selected candidates
+
         Y_next = problem(X_next).reshape(-1, 1)
         fid_idx = _fid_index(fidelities, X_next[0, -1])
         cost = costs[fid_idx]
 
-        # Append data
+
         train_x = torch.cat((train_x, X_next), dim=0)
         train_obj = _append_obj(train_obj, Y_next)
 
-        # Update progress bar
+
         cumulative_cost.append(float(cost.item()))
         best_obs = _safe_max_target(train_x, train_obj, target_fidelity, MIN_VALUE)
 
@@ -503,7 +484,7 @@ def rmfbo(
         if checkpoint_callback is not None:
             checkpoint_callback(train_x, train_obj, cumulative_cost, current_state)
 
-        # check budget
+
         if stopping_criteria == 'budget' and sum(cumulative_cost) > config.problem.budget:
             break
 
@@ -528,12 +509,8 @@ def rmfbo_random(
     checkpoint_callback=None,
     show_progress=True,
 ):
-    '''
-    Run the robust multi-fidelity Bayesian optimization loop.
-    In this version, the acquisition function is random sample within ROI.
-    '''
-    # load configurations
-    max_cholesky_size = float("inf")  # Always use Cholesky
+
+    max_cholesky_size = float("inf")
     stopping_criteria = config.problem.stopping_criteria
     n_iter = config.problem.n_iter if stopping_criteria != 'budget' else config.problem.max_n_iter
     n_init, low_cost, \
@@ -583,7 +560,7 @@ def rmfbo_random(
         disable=not show_progress,
     )
     for r_idx in bo_iterator:
-        # Fit GP models for objective and constraints
+
         _, model = init_model_srdk(train_x, train_obj, training_iter=max_opt_iter, verbose=False)
 
         x_candidates, _ = generate_initial_data(
@@ -615,7 +592,7 @@ def rmfbo_random(
         mc_f_ucb = qUpperConfidenceBound(base_model, beta=bo_beta)
         mc_f_lcb = qLowerConfidenceBound(base_model, beta=bo_beta)
 
-        # sample model for entropy
+
         lengthscale_list = []
         for _ in range(model_sample_num):
             _, tmp_model = init_model_srdk(
@@ -635,7 +612,7 @@ def rmfbo_random(
         )
         lengthscale_entropy = monte_carlo_entropy(int_lengthscale_list)
 
-        # random sample within ROI
+
         diameter_filter = torch.ones(
             space_sample_num,
             dtype=torch.bool,
@@ -668,7 +645,7 @@ def rmfbo_random(
         )
         X_next = x_candidates[x_cand_filter][rand_idx]
 
-        # optimize cost-aware acquisition function
+
         with gpytorch.settings.max_cholesky_size(max_cholesky_size):
             _, _tmp_max_ci = optimize_acqf_discrete(
                 acq_function=mc_f_ci,
@@ -717,16 +694,16 @@ def rmfbo_random(
                 )
                 X_next = x_candidates[diameter_filter][rand_idx]
 
-        # Evaluate both the objective and constraints for the selected candidates
+
         Y_next = problem(X_next).reshape(-1, 1)
         fid_idx = _fid_index(fidelities, X_next[0, -1])
         cost = costs[fid_idx]
 
-        # Append data
+
         train_x = torch.cat((train_x, X_next), dim=0)
         train_obj = _append_obj(train_obj, Y_next)
 
-        # Update progress bar
+
         cumulative_cost.append(float(cost.item()))
         best_obs = _safe_max_target(train_x, train_obj, target_fidelity, MIN_VALUE)
 
@@ -746,7 +723,7 @@ def rmfbo_random(
         if checkpoint_callback is not None:
             checkpoint_callback(train_x, train_obj, cumulative_cost, current_state)
 
-        # check budget
+
         if stopping_criteria == 'budget' and sum(cumulative_cost) > config.problem.budget:
             break
 
@@ -766,12 +743,7 @@ def rmfbo_pseudo(
     checkpoint_callback=None,
     show_progress=True,
 ):
-    '''
-    Run the robust multi-fidelity Bayesian optimization loop adapted from https://github.com/AaltoPML/rMFBO
-    Reference:
-    Multi-Fidelity Bayesian Optimization with Unreliable Information Sources
-    '''
-    # load configurations
+
     stopping_criteria = config.problem.stopping_criteria
     n_iter = config.problem.n_iter if stopping_criteria != 'budget' else config.problem.max_n_iter
     n_init, low_cost, \
@@ -828,7 +800,7 @@ def rmfbo_pseudo(
         disable=not show_progress,
     )
     for r_idx in bo_iterator:
-        # multi-fidelity subroutine
+
         mll, model = initialize_mf_model(train_x, train_obj, data_fidelity=fid_idx)
         fit_gpytorch_mll(mll)
 
@@ -871,7 +843,7 @@ def rmfbo_pseudo(
         else:
             raise NotImplementedError
 
-        # check if going to SF subroutine
+
         cond_var = model.posterior(new_x).variance <= (0.5 ** 2)
         cond_is = qMultiFidelityMaxValueEntropy(model=model, candidate_set=new_x)(X=new_x) >= 0.5
 
@@ -931,7 +903,7 @@ def rmfbo_pseudo(
         if checkpoint_callback is not None:
             checkpoint_callback(train_x, train_obj, cumulative_cost, current_state)
 
-        # check budget
+
         if stopping_criteria == 'budget' and sum(cumulative_cost) > config.problem.budget:
             break
 

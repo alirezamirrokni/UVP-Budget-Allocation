@@ -16,7 +16,6 @@ from tqdm import tqdm
 from botorch import fit_gpytorch_mll
 from botorch.acquisition.cost_aware import InverseCostWeightedUtility
 from botorch.models.cost import AffineFidelityCostModel
-from botorch.test_functions.multi_fidelity import AugmentedHartmann
 
 from src.adacent_baselines import run_adacent, run_enhanced_adacent
 from src.checkpointing import (
@@ -33,9 +32,6 @@ from src.checkpointing import (
 from src.model import init_model_srdk
 from src.opt import bo_step_kg, bo_step_mes, rmfbo, rmfbo_pseudo, rmfbo_random
 from src.test_functions import (
-    AugmentedRastrigin,
-    AugmentedRastrigin20D,
-    FixedProtein,
     LCBench,
     iaml_rpart,
     iaml_xgboost,
@@ -56,23 +52,7 @@ def _build_problem(config: DictConfig):
     negate = config.problem.negate
     scale = config.problem.scale
 
-    if config.problem.name == "AugmentedRastrigin":
-        problem = AugmentedRastrigin(negate=negate).to(**tkwargs)
-        problem.scale = scale
-
-    elif config.problem.name == "AugmentedRastrigin20D":
-        problem = AugmentedRastrigin20D(negate=negate).to(**tkwargs)
-        problem.scale = scale
-
-    elif config.problem.name == "AugmentedHartmann":
-        problem = AugmentedHartmann(negate=negate).to(**tkwargs)
-        problem.scale = scale
-
-    elif config.problem.name == "ProteinFixed":
-        problem = FixedProtein(negate=negate).to(**tkwargs)
-        problem.scale = scale
-
-    elif config.problem.name == "LCBench":
+    if config.problem.name == "LCBench":
         instance = config.problem.instance if hasattr(config.problem, "instance") else "3945"
         problem = LCBench(negate=negate, instance=instance).to(**tkwargs)
         problem.scale = scale
@@ -184,7 +164,6 @@ def _update_record_row(
     cumulative_cost: list[float],
     config: DictConfig,
 ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-    """Refresh one record row from the current in-progress repetition."""
     record[repeat_idx] = 0.0
     if not cumulative_cost:
         return None, None
@@ -211,8 +190,7 @@ def _update_record_row(
         dim=0,
     )
 
-    # All supplied configurations use batch_size=1. Using the number of costs
-    # also makes checkpoint restoration independent of the initial design size.
+
     record_length = min(
         len(cumulative_cost),
         maximum_reward.shape[0],
@@ -418,8 +396,8 @@ def _run_single_setting(
                 train_x = torch.empty((0, problem.dim), **tkwargs)
                 train_obj = torch.empty((0, 1), **tkwargs)
             elif config.algorithm.name in ["RMFBO", "RMFBO-RANDOM", "RMFBO-PSEUDO"]:
-                # These functions generate their own initial design and immediately
-                # checkpoint it through the callback below.
+
+
                 train_x = None
                 train_obj = None
             else:
